@@ -1031,76 +1031,75 @@ jobs:
           docker stop warp || true
           docker rm warp || true
 
-     - name: ذخیره سازی دانلود شده ها
-  run: |
-    BRANCH="${GITHUB_REF_NAME}"
-    REPO_OWNER="${{ github.repository_owner }}"
-    REPO_NAME="${{ github.event.repository.name }}"
+      - name: ذخیره سازی دانلود شده ها
+        run: |
+          BRANCH="${GITHUB_REF_NAME}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
 
-    echo "AVASAM (https://avasam.ir) - Incremental Push Mode"
-    BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
-    BACKUP_FILE_COUNT=$(find "$BACKUP_DIR" -type f 2>/dev/null | wc -l)
+          echo "AVASAM (https://avasam.ir) - Incremental Push Mode"
+          BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
+          BACKUP_FILE_COUNT=$(find "$BACKUP_DIR" -type f 2>/dev/null | wc -l)
 
-    if [ "$BACKUP_FILE_COUNT" -eq 0 ]; then
-      echo "No files to push. Exiting."
-      exit 0
-    fi
+          if [ "$BACKUP_FILE_COUNT" -eq 0 ]; then
+            echo "No files to push. Exiting."
+            exit 0
+          fi
 
-    urlencode() {
-      python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
-    }
+          urlencode() {
+            python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
+          }
 
-    regenerate_master_readme() {
-      MASTER_README="videos/README.md"
-      { echo "# DOWNLOADED VIDEOS LIST :"; echo ""; echo "----"; echo ""; } > "$MASTER_README"
-      VIDEO_EMOJIS=("🎬" "🎥" "📽️" "🎞️" "📺" "🎦" "▶️")
-      NUM=0
-      for folder in videos/*/; do
-        [ -d "$folder" ] || continue
-        FOLDER_NAME=$(basename "$folder")
-        [ -f "$folder/README.md" ] || continue
-        NUM=$((NUM + 1))
-        RANDOM_EMOJI="${VIDEO_EMOJIS[$RANDOM % ${#VIDEO_EMOJIS[@]}]}"
-        FOLDER_ENCODED=$(urlencode "$FOLDER_NAME")
-        FOLDER_LINK="https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/videos/${FOLDER_ENCODED}"
-        printf -- "- %s - %s [%s](%s)\n" "$NUM" "$RANDOM_EMOJI" "$FOLDER_NAME" "$FOLDER_LINK" >> "$MASTER_README"
-      done
-    }
+          regenerate_master_readme() {
+            MASTER_README="videos/README.md"
+            { echo "# DOWNLOADED VIDEOS LIST :"; echo ""; echo "----"; echo ""; } > "$MASTER_README"
+            VIDEO_EMOJIS=("🎬" "🎥" "📽️" "🎞️" "📺" "🎦" "▶️")
+            NUM=0
+            for folder in videos/*/; do
+              [ -d "$folder" ] || continue
+              FOLDER_NAME=$(basename "$folder")
+              [ -f "$folder/README.md" ] || continue
+              NUM=$((NUM + 1))
+              RANDOM_EMOJI="${VIDEO_EMOJIS[$RANDOM % ${#VIDEO_EMOJIS[@]}]}"
+              FOLDER_ENCODED=$(urlencode "$FOLDER_NAME")
+              FOLDER_LINK="https://github.com/${REPO_OWNER}/${REPO_NAME}/tree/${BRANCH}/videos/${FOLDER_ENCODED}"
+              printf -- "- %s - %s [%s](%s)\n" "$NUM" "$RANDOM_EMOJI" "$FOLDER_NAME" "$FOLDER_LINK" >> "$MASTER_README"
+            done
+          }
 
-    git fetch origin "$BRANCH"
-    git reset --hard origin/"$BRANCH"
-    mkdir -p videos
-    cp -r "$BACKUP_DIR"/* videos/
-
-    git add -f -A videos/
-    regenerate_master_readme
-    git add -f videos/README.md
-
-    if ! git diff --cached --quiet; then
-      git commit -m "[AVASAM] YouTube download [skip ci]"
-      PUSH_RETRY=0
-      while [ $PUSH_RETRY -lt 10 ]; do
-        PUSH_RETRY=$((PUSH_RETRY + 1))
-        if timeout 300 git push origin HEAD:"$BRANCH"; then
-          echo "Push successful!"
-          break
-        else
-          echo "Push failed, retry $PUSH_RETRY/10..."
-          sleep 5
           git fetch origin "$BRANCH"
           git reset --hard origin/"$BRANCH"
           mkdir -p videos
           cp -r "$BACKUP_DIR"/* videos/
-          git add -f -A videos/
+
+          git add -A videos/
           regenerate_master_readme
-          git add -f videos/README.md
-          git diff --cached --quiet || git commit -m "[AVASAM] YouTube download [skip ci]"
-        fi
-      done
-    fi
+          git add videos/README.md
 
-    echo "=========================================="
-    echo "All files pushed successfully!"
-    echo "made in AVASAM (https://avasam.ir)"
-    echo "=========================================="
+          if ! git diff --cached --quiet; then
+            git commit -m "[AVASAM] YouTube download [skip ci]"
+            PUSH_RETRY=0
+            while [ $PUSH_RETRY -lt 10 ]; do
+              PUSH_RETRY=$((PUSH_RETRY + 1))
+              if timeout 300 git push origin HEAD:"$BRANCH"; then
+                echo "Push successful!"
+                break
+              else
+                echo "Push failed, retry $PUSH_RETRY/10..."
+                sleep 5
+                git fetch origin "$BRANCH"
+                git reset --hard origin/"$BRANCH"
+                mkdir -p videos
+                cp -r "$BACKUP_DIR"/* videos/
+                git add -f -A videos/
+                regenerate_master_readme
+                git add videos/README.md
+                git diff --cached --quiet || git commit -m "[AVASAM] YouTube download [skip ci]"
+              fi
+            done
+          fi
 
+          echo "=========================================="
+          echo "All files pushed successfully!"
+          echo "made in AVASAM (https://avasam.ir)"
+          echo "=========================================="
