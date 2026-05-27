@@ -1,4 +1,4 @@
-name: YouTube Advanced Downloader
+name: YouTube Smart AV1 Downloader
 
 on:
   workflow_dispatch:
@@ -7,6 +7,16 @@ on:
         description: 'Enter YouTube Video/Playlist/Channel URL'
         required: true
         type: string
+      video_quality:
+        description: 'Select Video Quality (AV1 Preferred)'
+        required: true
+        type: choice
+        default: '1080p'
+        options:
+          - '1440p'
+          - '1080p'
+          - '720p'
+          - '480p'
 
 jobs:
   download-and-split:
@@ -17,7 +27,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. نصب ابزار ffmpeg و ابزار zip/split
+    # 2. نصب ابزار ffmpeg و ابزار zip
     - name: Install FFmpeg and Zip Tools
       run: |
         sudo apt-get update
@@ -29,26 +39,37 @@ jobs:
         sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp
         sudo chmod a+rx /usr/local/bin/yt-dlp
 
-    # 4. ساخت پوشه موقت و دانلود با بالاترین کیفیت ممکن (تا سقف 1440p یا بالاتر)
+    # 4. دانلود ویدیو (اولویت اول AV1، در غیر این صورت بهترین کیفیت بعدی)
     - name: Download Video
       run: |
         mkdir -p downloads
-        yt-dlp -f "bestvideo+bestaudio/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "${{ github.event.inputs.video_url }}"
+        
+        # تعیین رزولوشن بر اساس انتخاب کاربر
+        if [ "${{ github.event.inputs.video_quality }}" = "1440p" ]; then
+          HEIGHT="1440"
+        elif [ "${{ github.event.inputs.video_quality }}" = "1080p" ]; then
+          HEIGHT="1080"
+        elif [ "${{ github.event.inputs.video_quality }}" = "720p" ]; then
+          HEIGHT="720"
+        else
+          HEIGHT="480"
+        fi
+        
+        # فرمول اولویت‌بندی: ابتدا AV1 با رزولوشن انتخابی، سپس هر کدک دیگری در آن رزولوشن
+        yt-dlp -f "bestvideo[height<=$HEIGHT][vcodec^=av01]+bestaudio/bestvideo[height<=$HEIGHT]+bestaudio/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "${{ github.event.inputs.video_url }}"
 
     # 5. پارت‌بندی کردن فایل‌ها به تکه‌های ۴۵ مگابایتی
-    # از ابزار استاندارد linux split استفاده شده تا فایل بدون خرابی تکه تکه شود
     - name: Split Files into 45MB Parts
       run: |
         mkdir -p ready_parts
         cd downloads
         for file in *; do
           if [ -f "$file" ]; then
-            # تقسیم به پارت‌های 45 مگابایتی با پسوندهای قسمتی (مانند .mp4.part_aa)
             split -b 45M "$file" "../ready_parts/${file}.part_"
           fi
         done
 
-    # 6. ذخیره پارت‌ها به عنوان Artifact (جایگزین امن برای Git Push)
+    # 6. ذخیره پارت‌ها به عنوان Artifact
     - name: Upload Parts as Artifact
       uses: actions/upload-artifact@v4
       with:
