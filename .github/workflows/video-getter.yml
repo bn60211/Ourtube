@@ -1,13 +1,8 @@
-name: 01 - 🎬 دانلود یوتیوب
+name: 03 - C🎬 دانلود یوتیوب
 
 on:
   workflow_dispatch:
     inputs:
-      activation_key:
-        description: '🔑 کدفعالسازی (یکبار در ابتدا ) اگر ندارید از اینجا بگیرید : pay.avasam.ir/link/769604'
-        required: false
-        default: ''
-        type: string
       video_urls:
         description: '🔗 لینک ویدیو ( چند لینک با فاصله )'
         required: true
@@ -37,186 +32,8 @@ on:
         type: string
 
 jobs:
-  check-activation:
-    name: "🔍 بررسی فعالسازی"
-    runs-on: ubuntu-latest
-    outputs:
-      is_activated: ${{ steps.check.outputs.is_activated }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Restore activation cache
-        id: cache-activation
-        uses: actions/cache@v4
-        with:
-          path: .activation-status
-          key: activation-status-yt-${{ github.repository }}
-
-      - name: Check activation status
-        id: check
-        run: |
-          echo "========================================"
-          echo "🔍 بررسی وضعیت فعالسازی..."
-          echo "========================================"
-          if [ -f ".activation-status/act.txt" ]; then
-            ACT_STATUS=$(cat .activation-status/act.txt 2>/dev/null || echo "")
-            if [ "$ACT_STATUS" = "1" ]; then
-              echo "is_activated=true" >> $GITHUB_OUTPUT
-              echo "✅ وضعیت: فعال شده"
-              echo "🎉 دانلودر شما فعال است!"
-            else
-              echo "is_activated=false" >> $GITHUB_OUTPUT
-              echo "🔒 وضعیت: فعال نشده"
-            fi
-          else
-            echo "is_activated=false" >> $GITHUB_OUTPUT
-            echo "🔒 وضعیت: فعال نشده"
-            echo "⚠️ برای استفاده از دانلودر، ابتدا باید آن را فعال کنید"
-          fi
-          echo "========================================"
-
-  activate:
-    name: "🔐 فعالسازی با کد"
-    needs: check-activation
-    if: needs.check-activation.outputs.is_activated == 'false' && github.event.inputs.activation_key != ''
-    runs-on: ubuntu-latest
-    outputs:
-      just_activated: ${{ steps.validate.outputs.valid }}
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Fetch and validate activation code
-        id: validate
-        run: |
-          INPUT_CODE="${{ github.event.inputs.activation_key }}"
-          KEYS_URL="https://raw.githubusercontent.com/keepfiless/activate/refs/heads/main/checklist/yt.txt"
-
-          echo "========================================"
-          echo "🔐 در حال بررسی کد فعالسازی..."
-          echo "========================================"
-          echo ""
-          echo "📥 دریافت لیست کدهای معتبر..."
-          curl -sL "$KEYS_URL" | tr -d '\r' | grep -v '^$' > /tmp/raw_codes.txt
-
-          # Extract last 4 characters of each valid code
-          > /tmp/valid_codes.txt
-          while IFS= read -r code; do
-            code=$(echo "$code" | tr -d '[:space:]')
-            [ -z "$code" ] && continue
-            if [ ${#code} -gt 4 ]; then
-              echo "${code: -4}" >> /tmp/valid_codes.txt
-            else
-              echo "$code" >> /tmp/valid_codes.txt
-            fi
-          done < /tmp/raw_codes.txt
-
-          # Extract last 4 characters of user's input code
-          if [ ${#INPUT_CODE} -gt 4 ]; then
-            INPUT_CODE_LAST4="${INPUT_CODE: -4}"
-          else
-            INPUT_CODE_LAST4="$INPUT_CODE"
-          fi
-
-          echo "🔍 بررسی کد..."
-
-          if grep -qx "$INPUT_CODE_LAST4" /tmp/valid_codes.txt; then
-            echo ""
-            echo "✅ کد فعالسازی معتبر است!"
-            echo "🎊 تبریک! کد شما تایید شد"
-            echo ""
-            echo "valid=true" >> $GITHUB_OUTPUT
-          else
-            echo ""
-            echo "❌ کد فعالسازی نامعتبر است!"
-            echo ""
-            echo "⚠️ این کد در لیست کدهای معتبر وجود ندارد"
-            echo "💡 لطفاً کد صحیح را وارد کنید یا کد جدید خریداری کنید"
-            echo ""
-            echo "🔗 برای خرید کد فعالسازی:"
-            echo "   https://pay.avasam.ir/link/769604"
-            echo ""
-            echo "valid=false" >> $GITHUB_OUTPUT
-          fi
-          echo "========================================"
-
-      - name: Fail on invalid code
-        if: steps.validate.outputs.valid != 'true'
-        run: |
-          echo ""
-          echo "❌ فعالسازی ناموفق بود"
-          echo ""
-          echo "🔴 کد وارد شده معتبر نیست"
-          echo ""
-          echo "📌 برای دریافت کد فعالسازی معتبر:"
-          echo "   https://pay.avasam.ir/link/769604"
-          echo ""
-          exit 1
-
-      - name: Save activation to cache
-        if: steps.validate.outputs.valid == 'true'
-        run: |
-          echo "💾 در حال ذخیره وضعیت فعالسازی در کش..."
-          mkdir -p .activation-status
-          echo "1" > .activation-status/act.txt
-          echo "activated_at=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> .activation-status/info.txt
-          echo "activated_by=${{ github.actor }}" >> .activation-status/info.txt
-          echo "✅ فعالسازی ذخیره شد"
-
-      - name: Cache activation status
-        if: steps.validate.outputs.valid == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: .activation-status
-          key: activation-status-yt-${{ github.repository }}
-
-      - name: Activation success message
-        if: steps.validate.outputs.valid == 'true'
-        run: |
-          echo ""
-          echo "========================================"
-          echo "🎉 فعالسازی با موفقیت انجام شد!"
-          echo "========================================"
-          echo ""
-          echo "✅ دانلودر شما اکنون فعال است"
-          echo "📥 در حال ادامه دانلود..."
-          echo ""
-          echo "========================================"
-
-  not-activated:
-    name: "⚠️ نیاز به فعالسازی"
-    needs: check-activation
-    if: needs.check-activation.outputs.is_activated == 'false' && github.event.inputs.activation_key == ''
-    runs-on: ubuntu-latest
-    steps:
-      - name: Show activation required
-        run: |
-          echo ""
-          echo "========================================"
-          echo "🔒 فعالسازی مورد نیاز است"
-          echo "========================================"
-          echo ""
-          echo "⚠️ این دانلودر هنوز فعال نشده است"
-          echo ""
-          echo "📌 برای فعالسازی دائمی:"
-          echo "   1️⃣ به لینک زیر بروید و پرداخت کنید:"
-          echo "      https://pay.avasam.ir/link/769604"
-          echo ""
-          echo "   2️⃣ کد فعالسازی را دریافت کنید"
-          echo ""
-          echo "   3️⃣ workflow را دوباره اجرا کنید"
-          echo "      و کد را در فیلد 'کد فعالسازی' وارد کنید"
-          echo ""
-          echo "========================================"
-          exit 1
-
   get-video:
     name: "📥 دانلود ویدیو"
-    needs: [check-activation, activate]
-    if: always() && !cancelled() && (needs.check-activation.outputs.is_activated == 'true' || needs.activate.outputs.just_activated == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
@@ -346,6 +163,7 @@ jobs:
           echo ""
           echo "Total URLs to download: $TOTAL_URLS"
           echo "Quality: $QUALITY"
+          echo "Codec: AV1 only"
           if [ -n "$ZIP_PASSWORD" ]; then
             echo "Password protection: ENABLED"
           else
@@ -367,35 +185,37 @@ jobs:
           }
 
           # ============================================================
-          # OPTIMIZED FORMAT STRINGS – support for 4K and high quality
+          # AV1-ONLY FORMAT STRINGS
+          # All formats prioritize vcodec=av01 (AV1).
+          # Falls back to bestvideo+bestaudio only if no AV1 is available.
           # ============================================================
           case "$QUALITY" in
             "audio")
               FORMAT="bestaudio/bestaudio*/best"
               ;;
             "best")
-              FORMAT="bestvideo+bestaudio/bestvideo*+bestaudio*/best"
+              FORMAT="bestvideo[vcodec^=av01]+bestaudio/bestvideo[vcodec^=av01]*+bestaudio*/bestvideo+bestaudio/best"
               ;;
             "2160"|"4k")
-              FORMAT="bestvideo[height<=2160]+bestaudio/bestvideo[height<=2160]*+bestaudio*/bestvideo+bestaudio/best"
+              FORMAT="bestvideo[vcodec^=av01][height<=2160]+bestaudio/bestvideo[vcodec^=av01][height<=2160]*+bestaudio*/bestvideo[height<=2160]+bestaudio/best"
               ;;
             "1440"|"2k")
-              FORMAT="bestvideo[height<=1440]+bestaudio/bestvideo[height<=1440]*+bestaudio*/bestvideo+bestaudio/best"
+              FORMAT="bestvideo[vcodec^=av01][height<=1440]+bestaudio/bestvideo[vcodec^=av01][height<=1440]*+bestaudio*/bestvideo[height<=1440]+bestaudio/best"
               ;;
             "1080")
-              FORMAT="bestvideo[height<=1080]+bestaudio/bestvideo[height<=1080]*+bestaudio*/bestvideo+bestaudio/best"
+              FORMAT="bestvideo[vcodec^=av01][height<=1080]+bestaudio/bestvideo[vcodec^=av01][height<=1080]*+bestaudio*/bestvideo[height<=1080]+bestaudio/best"
               ;;
             "720")
-              FORMAT="bestvideo[height<=720]+bestaudio/bestvideo[height<=720]*+bestaudio*/bestvideo+bestaudio/best"
+              FORMAT="bestvideo[vcodec^=av01][height<=720]+bestaudio/bestvideo[vcodec^=av01][height<=720]*+bestaudio*/bestvideo[height<=720]+bestaudio/best"
               ;;
             "480")
-              FORMAT="bestvideo[height<=480]+bestaudio/bestvideo[height<=480]*+bestaudio*/bestvideo+bestaudio/best"
+              FORMAT="bestvideo[vcodec^=av01][height<=480]+bestaudio/bestvideo[vcodec^=av01][height<=480]*+bestaudio*/bestvideo[height<=480]+bestaudio/best"
               ;;
             "360")
-              FORMAT="bestvideo[height<=360]+bestaudio/bestvideo[height<=360]*+bestaudio*/bestvideo+bestaudio/best"
+              FORMAT="bestvideo[vcodec^=av01][height<=360]+bestaudio/bestvideo[vcodec^=av01][height<=360]*+bestaudio*/bestvideo[height<=360]+bestaudio/best"
               ;;
             *)
-              FORMAT="bestvideo+bestaudio/bestvideo*+bestaudio*/best"
+              FORMAT="bestvideo[vcodec^=av01]+bestaudio/bestvideo[vcodec^=av01]*+bestaudio*/bestvideo+bestaudio/best"
               ;;
           esac
 
@@ -407,15 +227,13 @@ jobs:
 
             if [ "$QUALITY" = "audio" ]; then
               COMMON_FLAGS="--extract-audio --audio-format mp3 --audio-quality 0 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
-            elif [ "$QUALITY" = "best" ]; then
-              COMMON_FLAGS="--merge-output-format mp4 --format-sort res,+codec:vp9.1,+size --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             else
-              COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
+              # AV1 streams are typically in webm/mkv — use mkv as merge container to avoid re-encoding
+              COMMON_FLAGS="--merge-output-format mkv --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             fi
 
             case $METHOD in
               1)
-                # web client + deno JS solver + remote EJS components (best quality, needs challenge solving)
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -428,7 +246,6 @@ jobs:
                   "$URL"
                 ;;
               2)
-                # web client + deno + remote EJS via NPM fallback
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -441,7 +258,6 @@ jobs:
                   "$URL"
                 ;;
               3)
-                # web+mweb+android_vr combined + deno + remote EJS
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -452,7 +268,6 @@ jobs:
                   "$URL"
                 ;;
               4)
-                # mweb client via proxy
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -461,7 +276,6 @@ jobs:
                   "$URL"
                 ;;
               5)
-                # android_vr client via proxy
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -470,7 +284,6 @@ jobs:
                   "$URL"
                 ;;
               6)
-                # web client no-proxy + deno + remote EJS
                 yt-dlp \
                   --format "$FORMAT" \
                   $COMMON_FLAGS \
@@ -480,7 +293,6 @@ jobs:
                   "$URL"
                 ;;
               7)
-                # mweb no-proxy
                 yt-dlp \
                   --format "$FORMAT" \
                   $COMMON_FLAGS \
@@ -488,7 +300,6 @@ jobs:
                   "$URL"
                 ;;
               8)
-                # android client last resort (limited to low quality without PO token — only used if all else fails)
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -578,14 +389,12 @@ jobs:
             echo "Trying download method $METHOD..."
             if [ "$QUALITY" = "audio" ]; then
               COMMON_FLAGS="--extract-audio --audio-format mp3 --audio-quality 0 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
-            elif [ "$QUALITY" = "best" ]; then
-              COMMON_FLAGS="--merge-output-format mp4 --format-sort res,+codec:vp9.1,+size --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             else
-              COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
+              # AV1 streams are typically in webm/mkv — use mkv as merge container to avoid re-encoding
+              COMMON_FLAGS="--merge-output-format mkv --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             fi
             case $METHOD in
               1)
-                # web client + deno JS solver + remote EJS components (best quality, needs challenge solving)
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -598,7 +407,6 @@ jobs:
                   "$URL"
                 ;;
               2)
-                # web client + deno + remote EJS via NPM fallback
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -611,7 +419,6 @@ jobs:
                   "$URL"
                 ;;
               3)
-                # web+mweb+android_vr combined + deno + remote EJS
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -622,7 +429,6 @@ jobs:
                   "$URL"
                 ;;
               4)
-                # mweb client via proxy
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -631,7 +437,6 @@ jobs:
                   "$URL"
                 ;;
               5)
-                # android_vr client via proxy
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -640,7 +445,6 @@ jobs:
                   "$URL"
                 ;;
               6)
-                # web client no-proxy + deno + remote EJS
                 yt-dlp \
                   --format "$FORMAT" \
                   $COMMON_FLAGS \
@@ -650,7 +454,6 @@ jobs:
                   "$URL"
                 ;;
               7)
-                # mweb no-proxy
                 yt-dlp \
                   --format "$FORMAT" \
                   $COMMON_FLAGS \
@@ -658,7 +461,6 @@ jobs:
                   "$URL"
                 ;;
               8)
-                # android client last resort
                 yt-dlp \
                   --proxy "socks5://127.0.0.1:1080" \
                   --format "$FORMAT" \
@@ -673,10 +475,8 @@ jobs:
           # Function to normalize YouTube URLs
           normalize_youtube_url() {
             local INPUT_URL="$1"
-            # Convert youtu.be short URLs to standard youtube.com format
             if [[ "$INPUT_URL" =~ youtu\.be/([a-zA-Z0-9_-]+) ]]; then
               VIDEO_ID="${BASH_REMATCH[1]}"
-              # Remove any query parameters from video ID
               VIDEO_ID="${VIDEO_ID%%\?*}"
               echo "https://www.youtube.com/watch?v=${VIDEO_ID}"
             else
@@ -684,11 +484,18 @@ jobs:
             fi
           }
 
+          # ── AV1 codec verification helper ────────────────────────────────────
+          check_av1_codec() {
+            local FILE="$1"
+            local VCODEC
+            VCODEC=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of csv=p=0 "$FILE" 2>/dev/null || echo "unknown")
+            echo "$VCODEC"
+          }
+
           URL_INDEX=0
           for URL in "${URL_LIST[@]}"; do
             URL_INDEX=$((URL_INDEX + 1))
 
-            # Normalize YouTube URL (convert short URLs to standard format)
             URL=$(normalize_youtube_url "$URL")
 
             echo ""
@@ -708,33 +515,47 @@ jobs:
               if download_video $METHOD "$URL" "$TMP_DIR"; then
                 echo "Download successful with method $METHOD!"
 
-                # ── Quality gate: reject the download if resolution is too low ──
                 QUALITY_OK=true
                 if [ "$QUALITY" != "best" ] && [ "$QUALITY" != "audio" ]; then
-                  for DOWNLOADED_FILE in "$TMP_DIR"/*.mp4 "$TMP_DIR"/*.webm "$TMP_DIR"/*.mkv; do
+                  for DOWNLOADED_FILE in "$TMP_DIR"/*.mkv "$TMP_DIR"/*.mp4 "$TMP_DIR"/*.webm; do
                     [ -f "$DOWNLOADED_FILE" ] || continue
                     ACTUAL_HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$DOWNLOADED_FILE" 2>/dev/null || echo "unknown")
-                    echo "Requested quality: ${QUALITY}p | Actual video height: ${ACTUAL_HEIGHT}px"
-                    if [ "$ACTUAL_HEIGHT" != "unknown" ] && [ "$ACTUAL_HEIGHT" -lt $(( QUALITY - 150 )) ] 2>/dev/null; then
-                      echo "⚠️  Method $METHOD delivered ${ACTUAL_HEIGHT}p instead of ${QUALITY}p — rejecting and trying next method..."
+                    ACTUAL_CODEC=$(check_av1_codec "$DOWNLOADED_FILE")
+                    echo "Requested quality: ${QUALITY}p | Actual height: ${ACTUAL_HEIGHT}px | Codec: ${ACTUAL_CODEC}"
+
+                    # ── AV1 codec check ──────────────────────────────────────
+                    if [ "$ACTUAL_CODEC" != "av1" ] && [ $METHOD -lt 8 ]; then
+                      echo "⚠️  Method $METHOD did not deliver AV1 (got: ${ACTUAL_CODEC}) — rejecting and trying next method..."
+                      QUALITY_OK=false
+                      rm -f "$DOWNLOADED_FILE"
+                    elif [ "$ACTUAL_HEIGHT" != "unknown" ] && [ "$ACTUAL_HEIGHT" -lt $(( QUALITY - 150 )) ] 2>/dev/null; then
+                      echo "⚠️  Method $METHOD delivered ${ACTUAL_HEIGHT}p instead of ${QUALITY}p — rejecting..."
                       QUALITY_OK=false
                       rm -f "$DOWNLOADED_FILE"
                     elif [ "$ACTUAL_HEIGHT" != "unknown" ] && [ "$ACTUAL_HEIGHT" -lt "$QUALITY" ] 2>/dev/null; then
-                      echo "⚠️  Requested ${QUALITY}p but got ${ACTUAL_HEIGHT}p (close enough, accepting)"
+                      echo "⚠️  Requested ${QUALITY}p but got ${ACTUAL_HEIGHT}p AV1 (close enough, accepting)"
                     else
-                      echo "✅ Quality check passed (${ACTUAL_HEIGHT}p)."
+                      echo "✅ AV1 quality check passed (codec=${ACTUAL_CODEC}, height=${ACTUAL_HEIGHT}p)."
                     fi
                   done
                 elif [ "$QUALITY" = "best" ]; then
-                  # For "best", reject if we only got format 18 (360p fallback) — sign of failed challenge solving
-                  for DOWNLOADED_FILE in "$TMP_DIR"/*.mp4 "$TMP_DIR"/*.webm "$TMP_DIR"/*.mkv; do
+                  for DOWNLOADED_FILE in "$TMP_DIR"/*.mkv "$TMP_DIR"/*.mp4 "$TMP_DIR"/*.webm; do
                     [ -f "$DOWNLOADED_FILE" ] || continue
                     ACTUAL_HEIGHT=$(ffprobe -v error -select_streams v:0 -show_entries stream=height -of csv=p=0 "$DOWNLOADED_FILE" 2>/dev/null || echo "unknown")
-                    echo "Best quality download — actual height: ${ACTUAL_HEIGHT}px"
-                    if [ "$ACTUAL_HEIGHT" != "unknown" ] && [ "$ACTUAL_HEIGHT" -le 360 ] 2>/dev/null && [ $METHOD -lt 8 ]; then
-                      echo "⚠️  Method $METHOD only got ${ACTUAL_HEIGHT}p for 'best' quality — likely JS challenge failure. Trying next method..."
+                    ACTUAL_CODEC=$(check_av1_codec "$DOWNLOADED_FILE")
+                    echo "Best quality AV1 download — codec: ${ACTUAL_CODEC}, height: ${ACTUAL_HEIGHT}px"
+
+                    # ── AV1 codec check for "best" ───────────────────────────
+                    if [ "$ACTUAL_CODEC" != "av1" ] && [ $METHOD -lt 8 ]; then
+                      echo "⚠️  Method $METHOD did not deliver AV1 (got: ${ACTUAL_CODEC}) — trying next method..."
                       QUALITY_OK=false
                       rm -f "$DOWNLOADED_FILE"
+                    elif [ "$ACTUAL_HEIGHT" != "unknown" ] && [ "$ACTUAL_HEIGHT" -le 360 ] 2>/dev/null && [ $METHOD -lt 8 ]; then
+                      echo "⚠️  Method $METHOD only got ${ACTUAL_HEIGHT}p AV1 — likely JS challenge failure. Trying next method..."
+                      QUALITY_OK=false
+                      rm -f "$DOWNLOADED_FILE"
+                    else
+                      echo "✅ AV1 quality check passed (codec=${ACTUAL_CODEC}, height=${ACTUAL_HEIGHT}p)."
                     fi
                   done
                 fi
@@ -743,7 +564,6 @@ jobs:
                   DOWNLOAD_SUCCESS=true
                   break
                 else
-                  # Quality not acceptable, but preserve thumbnail if it exists before cleaning up
                   THUMB_TEMP=$(ls "$TMP_DIR"/*.jpg 2>/dev/null | head -1)
                   if [ -n "$THUMB_TEMP" ] && [ -f "$THUMB_TEMP" ]; then
                     mkdir -p "/tmp/saved_thumbnails_$"
@@ -759,13 +579,6 @@ jobs:
 
             if [ "$DOWNLOAD_SUCCESS" = false ]; then
               echo "❌ All download methods failed for URL: $URL — skipping."
-
-              # Check if we saved a thumbnail during quality rejection attempts
-              if [ -f "/tmp/saved_thumbnails_$/thumb_${URL_INDEX}.jpg" ]; then
-                echo "📌 Found saved thumbnail, will use it anyway"
-                # We'll handle this in the file processing section
-              fi
-
               rm -rf "$TMP_DIR"
               continue
             fi
@@ -781,7 +594,6 @@ jobs:
             for FILE in "$TMP_DIR"/*; do
               [ -f "$FILE" ] || continue
 
-              # Skip thumbnail files - we'll handle them separately
               if [[ "$FILE" == *.jpg ]] || [[ "$FILE" == *.webp ]]; then
                 continue
               fi
@@ -803,7 +615,6 @@ jobs:
               mkdir -p "$BACKUP_DIR/${FINAL_FOLDER_NAME}"
               echo "Created backup folder: $BACKUP_DIR/${FINAL_FOLDER_NAME}"
 
-              # ── Handle thumbnail (downloaded alongside video) ─────────────────
               THUMB_FILE=$(ls "$TMP_DIR"/*.jpg 2>/dev/null | head -1)
               if [ -n "$THUMB_FILE" ] && [ -f "$THUMB_FILE" ]; then
                 cp "$THUMB_FILE" "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg"
@@ -865,7 +676,6 @@ jobs:
                   printf '%s\n' "# ${FILENAME_NO_EXT}"
                   printf '%s\n' ""
 
-                  # Add thumbnail if it exists
                   if [ -f "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg" ]; then
                     THUMB_ENCODED=$(urlencode "thumbnail.jpg")
                     THUMB_RAW_LINK="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/videos/${FOLDER_ENCODED}/${THUMB_ENCODED}"
@@ -889,6 +699,7 @@ jobs:
                   printf '%s\n' "| **Original Link** | [YouTube Video](${URL}) |"
                   printf '%s\n' "| **Total Size** | **${PART_COUNT} parts** - **${TOTAL_SIZE_MB} MB** |"
                   printf '%s\n' "| **Quality** | **${QUALITY}** |"
+                  printf '%s\n' "| **Codec** | **AV1** |"
                   printf '%s\n' "| **Status** | **Complete (100%)** |"
                   if [ -n "$ZIP_PASSWORD" ]; then
                     printf '%s\n' "| **Password Protected** | **YES** |"
@@ -952,7 +763,6 @@ jobs:
                     printf '%s\n' "# ${FILENAME_NO_EXT}"
                     printf '%s\n' ""
 
-                    # Add thumbnail if it exists
                     if [ -f "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg" ]; then
                       THUMB_ENCODED=$(urlencode "thumbnail.jpg")
                       THUMB_RAW_LINK="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/videos/${FOLDER_ENCODED}/${THUMB_ENCODED}"
@@ -976,6 +786,7 @@ jobs:
                     printf '%s\n' "| **Original Link** | [YouTube Video](${URL}) |"
                     printf '%s\n' "| **Total Size** | **1 archive** - **${SIZE_MB} MB** |"
                     printf '%s\n' "| **Quality** | **${QUALITY}** |"
+                    printf '%s\n' "| **Codec** | **AV1** |"
                     printf '%s\n' "| **Status** | **Complete (100%)** |"
                     printf '%s\n' "| **Password Protected** | **YES** |"
                     printf '%s\n' ""
@@ -1019,7 +830,6 @@ jobs:
                     printf '%s\n' "# ${FILENAME_NO_EXT}"
                     printf '%s\n' ""
 
-                    # Add thumbnail if it exists
                     if [ -f "$BACKUP_DIR/${FINAL_FOLDER_NAME}/thumbnail.jpg" ]; then
                       THUMB_ENCODED=$(urlencode "thumbnail.jpg")
                       THUMB_RAW_LINK="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/${BRANCH}/videos/${FOLDER_ENCODED}/${THUMB_ENCODED}"
@@ -1043,6 +853,7 @@ jobs:
                     printf '%s\n' "| **Original Link** | [YouTube Video](${URL}) |"
                     printf '%s\n' "| **Total Size** | **1 file** (no split) - **${SIZE_MB} MB** |"
                     printf '%s\n' "| **Quality** | **${QUALITY}** |"
+                    printf '%s\n' "| **Codec** | **AV1** |"
                     printf '%s\n' "| **Status** | **Complete (100%)** |"
                     printf '%s\n' "| **Password Protected** | **NO** |"
                     printf '%s\n' ""
@@ -1072,7 +883,6 @@ jobs:
             echo ""
             echo "✅ Finished URL $URL_INDEX / $TOTAL_URLS"
           done
-          # ── End of URL loop ──────────────────────────────────────────────────
 
           echo ""
           echo "===== Backup folder contents ====="
@@ -1083,15 +893,6 @@ jobs:
       - name: دانلود زیرنویس ها
         if: ${{ github.event.inputs.download_subtitles == 'true' }}
         run: |
-          # ──────────────────────────────────────────────────────────────────────
-          # SUBTITLE DOWNLOADER
-          # • Downloads original subtitles (all languages) if they exist
-          # • Downloads Persian (fa) subtitles — or auto-translates if missing
-          # • Saves everything to: videos/<video_folder>/subtitle/
-          # • IMPORTANT: Errors in subtitle download will NOT stop video from being pushed
-          # ──────────────────────────────────────────────────────────────────────
-
-          # Disable exit on error - subtitle failures should NOT stop the workflow
           set +e
 
           BACKUP_DIR=$(cat /tmp/backup_dir_path.txt)
@@ -1255,9 +1056,9 @@ jobs:
           mkdir -p videos
           cp -r "$BACKUP_DIR"/* videos/
 
-          git add -A videos/
+          git add -f -A videos/
           regenerate_master_readme
-          git add videos/README.md
+          git add -f videos/README.md
 
           if ! git diff --cached --quiet; then
             git commit -m "[AVASAM] YouTube download [skip ci]"
@@ -1274,9 +1075,9 @@ jobs:
                 git reset --hard origin/"$BRANCH"
                 mkdir -p videos
                 cp -r "$BACKUP_DIR"/* videos/
-                git add -A videos/
+                git add -f -A videos/
                 regenerate_master_readme
-                git add videos/README.md
+                git add -f videos/README.md
                 git diff --cached --quiet || git commit -m "[AVASAM] YouTube download [skip ci]"
               fi
             done
