@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      video_only:
+        description: '🔇 دانلود فقط ویدیو ( بدون صدا )'
+        required: false
+        default: false
+        type: boolean
       quality:
         description: '🎬 کیفیت و نوع'
         required: false
@@ -133,6 +138,7 @@ jobs:
           YT_URLS: ${{ github.event.inputs.video_urls }}
           YT_QUALITY: ${{ github.event.inputs.quality }}
           YT_PASSWORD: ${{ github.event.inputs.password }}
+          VIDEO_ONLY: ${{ github.event.inputs.video_only }}
           REPO_OWNER_ENV: ${{ github.repository_owner }}
           REPO_NAME_ENV: ${{ github.event.repository.name }}
           BRANCH_ENV: ${{ github.ref_name }}
@@ -146,11 +152,9 @@ jobs:
           ZIP_PASSWORD="${YT_PASSWORD}"
           DOWNLOAD_SUBS="${{ github.event.inputs.download_subtitles }}"
 
-          # Changed from 45MB to 90MB as requested
           SPLIT_MB=90
           SPLIT_BYTES=$(( SPLIT_MB * 1024 * 1024 ))
 
-          # Create safe backup location for our files
           BACKUP_DIR="/tmp/video_backup_$$"
           mkdir -p "$BACKUP_DIR"
           echo "$BACKUP_DIR" > /tmp/backup_dir_path.txt
@@ -163,6 +167,8 @@ jobs:
           echo ""
           echo "Total URLs to download: $TOTAL_URLS"
           echo "Quality: $QUALITY"
+          echo "Video Only Mode: ${VIDEO_ONLY}"
+          
           if [ -n "$ZIP_PASSWORD" ]; then
             echo "Password protection: ENABLED"
           else
@@ -179,64 +185,32 @@ jobs:
             echo "$1" | sed 's/ /-/g' | sed 's/　/-/g' | tr -s '-'
           }
 
-          urlencode() {
-            python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
-          }
-
           # ============================================================
-          # OPTIMIZED FORMAT STRINGS – AV1 FORCED
+          # OPTIMIZED FORMAT STRINGS – AV1 FORCED (WITH VIDEO-ONLY OPTION)
           # ============================================================
-          case "$QUALITY" in
-            "audio")
-              FORMAT="bestaudio/bestaudio*/best"
-              ;;
-            "best")
-              FORMAT="bestvideo[vcodec^=av01]+bestaudio/best"
-              ;;
-            "2160"|"4k")
-              FORMAT="bestvideo[height<=2160][vcodec^=av01]+bestaudio/best"
-              ;;
-            "1440"|"2k")
-              FORMAT="bestvideo[height<=1440][vcodec^=av01]+bestaudio/best"
-              ;;
-            "1080")
-              FORMAT="bestvideo[height<=1080][vcodec^=av01]+bestaudio/best"
-              ;;
-            "720")
-              FORMAT="bestvideo[height<=720][vcodec^=av01]+bestaudio/best"
-              ;;
-            "480")
-              FORMAT="bestvideo[height<=480][vcodec^=av01]+bestaudio/best"
-              ;;
-            *)
-              FORMAT="bestvideo[vcodec^=av01]+bestaudio/best"
-              ;;
-          esac
-
-          RANDOM_WORDS=("alpha" "beta" "gamma" "delta" "epsilon" "zeta" "theta" "kappa" "lambda" "sigma" "omega" "nova" "star" "moon" "sun" "sky" "cloud" "river" "ocean" "mountain")
-
-          get_random_word() {
-            echo "${RANDOM_WORDS[$RANDOM % ${#RANDOM_WORDS[@]}]}_$RANDOM"
-          }
-
-          get_unique_folder() {
-            local BASE_PATH="$1"
-            local NAME="$2"
-
-            if [ ! -d "$BASE_PATH/$NAME" ] && [ ! -d "$BACKUP_DIR/$NAME" ]; then
-              echo "$NAME"
-              return
-            fi
-            local RANDOM_SUFFIX=$(get_random_word)
-            while [ -d "$BASE_PATH/${NAME}_${RANDOM_SUFFIX}" ] || [ -d "$BACKUP_DIR/${NAME}_${RANDOM_SUFFIX}" ]; do
-              RANDOM_SUFFIX=$(get_random_word)
-            done
-            echo "${NAME}_${RANDOM_SUFFIX}"
-          }
-
-          REPO_OWNER="${REPO_OWNER_ENV}"
-          REPO_NAME="${REPO_NAME_ENV}"
-          BRANCH="${BRANCH_ENV}"
+          if [ "${VIDEO_ONLY}" = "true" ]; then
+            case "$QUALITY" in
+              "audio")  FORMAT="bestaudio/bestaudio*/best" ;; # Audio overrides video_only
+              "best")   FORMAT="bestvideo[vcodec^=av01]/bestvideo" ;;
+              "2160")   FORMAT="bestvideo[height<=2160][vcodec^=av01]/bestvideo[height<=2160]" ;;
+              "1440")   FORMAT="bestvideo[height<=1440][vcodec^=av01]/bestvideo[height<=1440]" ;;
+              "1080")   FORMAT="bestvideo[height<=1080][vcodec^=av01]/bestvideo[height<=1080]" ;;
+              "720")    FORMAT="bestvideo[height<=720][vcodec^=av01]/bestvideo[height<=720]" ;;
+              "480")    FORMAT="bestvideo[height<=480][vcodec^=av01]/bestvideo[height<=480]" ;;
+              *)        FORMAT="bestvideo[vcodec^=av01]/bestvideo" ;;
+            esac
+          else
+            case "$QUALITY" in
+              "audio")  FORMAT="bestaudio/bestaudio*/best" ;;
+              "best")   FORMAT="bestvideo[vcodec^=av01]+bestaudio/best" ;;
+              "2160")   FORMAT="bestvideo[height<=2160][vcodec^=av01]+bestaudio/best" ;;
+              "1440")   FORMAT="bestvideo[height<=1440][vcodec^=av01]+bestaudio/best" ;;
+              "1080")   FORMAT="bestvideo[height<=1080][vcodec^=av01]+bestaudio/best" ;;
+              "720")    FORMAT="bestvideo[height<=720][vcodec^=av01]+bestaudio/best" ;;
+              "480")    FORMAT="bestvideo[height<=480][vcodec^=av01]+bestaudio/best" ;;
+              *)        FORMAT="bestvideo[vcodec^=av01]+bestaudio/best" ;;
+            esac
+          fi
 
           echo "$FORMAT" > /tmp/yt_format.txt
           echo "$QUALITY" > /tmp/yt_quality.txt
@@ -245,7 +219,6 @@ jobs:
           echo "$REPO_OWNER_ENV" > /tmp/yt_repo_owner.txt
           echo "$REPO_NAME_ENV" > /tmp/yt_repo_name.txt
           echo "$BRANCH_ENV" > /tmp/yt_branch.txt
-          # Save URL list (newline separated)
           printf "%s\n" "${URL_LIST[@]}" > /tmp/yt_urls.txt
 
       - name: دانلود ویدیو
@@ -258,7 +231,6 @@ jobs:
           REPO_NAME=$(cat /tmp/yt_repo_name.txt)
           BRANCH=$(cat /tmp/yt_branch.txt)
           
-          # Changed from 45MB to 90MB as requested
           SPLIT_MB=90
           SPLIT_BYTES=$(( SPLIT_MB * 1024 * 1024 ))
           
@@ -267,9 +239,6 @@ jobs:
 
           sanitize_name() {
             echo "$1" | sed 's/ /-/g' | sed 's/　/-/g' | tr -s '-'
-          }
-          urlencode() {
-            python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$1"
           }
           get_random_word() {
             RANDOM_WORDS=("alpha" "beta" "gamma" "delta" "epsilon" "zeta" "theta" "kappa" "lambda" "sigma" "omega" "nova" "star" "moon" "sun" "sky" "cloud" "river" "ocean" "mountain")
@@ -292,13 +261,20 @@ jobs:
             local URL=$2
             local TMP_DIR=$3
             echo "Trying download method $METHOD..."
+            
+            # Use appropriate container extensions based on quality or presence of audio
             if [ "$QUALITY" = "audio" ]; then
-              COMMON_FLAGS="--extract-audio --audio-format mp3 --audio-quality 0 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
-            elif [ "$QUALITY" = "best" ]; then
-              COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
+              OUTPUT_TEMPLATE="${TMP_DIR}/%(title)s.%(ext)s"
+              COMMON_FLAGS="--extract-audio --audio-format mp3 --audio-quality 0 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${OUTPUT_TEMPLATE} --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
+            elif [ "${{ github.event.inputs.video_only }}" = "true" ]; then
+              # For video-only, avoid merging format flags that force mp4 if it's naturally webm
+              OUTPUT_TEMPLATE="${TMP_DIR}/%(title)s.%(ext)s"
+              COMMON_FLAGS="--write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${OUTPUT_TEMPLATE} --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             else
-              COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${TMP_DIR}/%(title)s.%(ext)s --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
+              OUTPUT_TEMPLATE="${TMP_DIR}/%(title)s.%(ext)s"
+              COMMON_FLAGS="--merge-output-format mp4 --write-thumbnail --convert-thumbnails jpg --no-cache-dir --output ${OUTPUT_TEMPLATE} --no-part --no-playlist --retries 5 --fragment-retries 5 --no-check-certificates --concurrent-fragments 8 --buffer-size 16K --http-chunk-size 10M --progress --newline"
             fi
+
             case $METHOD in
               1)
                 yt-dlp \
