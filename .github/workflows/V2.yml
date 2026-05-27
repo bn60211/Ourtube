@@ -1,4 +1,4 @@
-name: YouTube Smart AV1 Downloader
+name: YouTube Smart AV1 Downloader (Anti-Bot)
 
 on:
   workflow_dispatch:
@@ -17,6 +17,10 @@ on:
           - '1080p'
           - '720p'
           - '480p'
+      youtube_cookies:
+        description: 'Paste your YouTube Netscape Cookies (Optional but Recommended)'
+        required: false
+        type: string
 
 jobs:
   download-and-split:
@@ -27,11 +31,11 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    # 2. نصب ابزار ffmpeg و ابزار zip
-    - name: Install FFmpeg and Zip Tools
+    # 2. نصب ابزار ffmpeg، ابزار zip و مفسر Node.js برای حل ارور JavaScript runtime
+    - name: Install FFmpeg, Zip, and NodeJS
       run: |
         sudo apt-get update
-        sudo apt-get install -y ffmpeg zip
+        sudo apt-get install -y ffmpeg zip nodejs
 
     # 3. نصب آخرین نسخه yt-dlp
     - name: Install yt-dlp
@@ -39,7 +43,17 @@ jobs:
         sudo wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp
         sudo chmod a+rx /usr/local/bin/yt-dlp
 
-    # 4. دانلود ویدیو (اولویت اول AV1، در غیر این صورت بهترین کیفیت بعدی)
+    # 4. آماده‌سازی فایل کوکی در صورت وجود
+    - name: Setup Cookies
+      run: |
+        if [ -n "${{ github.event.inputs.youtube_cookies }}" ]; then
+          echo "${{ github.event.inputs.youtube_cookies }}" > cookies.txt
+          echo "USE_COOKIES=true" >> $GITHUB_ENV
+        else
+          echo "USE_COOKIES=false" >> $GITHUB_ENV
+        fi
+
+    # 5. دانلود ویدیو (اولویت اول AV1، در غیر این صورت بهترین کیفیت بعدی) همراه با بای‌پاس ربات
     - name: Download Video
       run: |
         mkdir -p downloads
@@ -55,10 +69,18 @@ jobs:
           HEIGHT="480"
         fi
         
-        # فرمول اولویت‌بندی: ابتدا AV1 با رزولوشن انتخابی، سپس هر کدک دیگری در آن رزولوشن
-        yt-dlp -f "bestvideo[height<=$HEIGHT][vcodec^=av01]+bestaudio/bestvideo[height<=$HEIGHT]+bestaudio/best" --merge-output-format mp4 -o "downloads/%(title)s.%(ext)s" "${{ github.event.inputs.video_url }}"
+        # تعریف پایه دستور دانلود
+        CMD="yt-dlp -f 'bestvideo[height<=$HEIGHT][vcodec^=av01]+bestaudio/bestvideo[height<=$HEIGHT]+bestaudio/best' --merge-output-format mp4"
+        
+        # اضافه کردن آپشن کوکی در صورت وجود
+        if [ "$USE_COOKIES" = "true" ]; then
+          CMD="$CMD --cookies cookies.txt"
+        fi
+        
+        # اجرای دستور نهایی دانلود
+        eval "$CMD -o 'downloads/%(title)s.%(ext)s' '${{ github.event.inputs.video_url }}'"
 
-    # 5. پارت‌بندی کردن فایل‌ها به تکه‌های ۴۵ مگابایتی
+    # 6. پارت‌بندی کردن فایل‌ها به تکه‌های ۴۵ مگابایتی
     - name: Split Files into 45MB Parts
       run: |
         mkdir -p ready_parts
@@ -69,7 +91,7 @@ jobs:
           fi
         done
 
-    # 6. ذخیره پارت‌ها به عنوان Artifact
+    # 7. ذخیره پارت‌ها به عنوان Artifact
     - name: Upload Parts as Artifact
       uses: actions/upload-artifact@v4
       with:
